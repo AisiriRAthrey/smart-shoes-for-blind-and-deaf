@@ -1,0 +1,78 @@
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
+
+// Define pins
+#define buzzer 6
+#define triggerPin 12
+#define echoPin 13
+
+// Create GPS and GSM objects
+SoftwareSerial gpsSerial(4, 3);  // RX, TX for GPS (change pin numbers as needed)
+SoftwareSerial gsmSerial(7, 8);  // RX, TX for GSM (change pin numbers as needed)
+TinyGPSPlus gps;
+
+void setup() {
+  // Initialize pins
+  pinMode(triggerPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(buzzer, OUTPUT);
+  
+  // Start serial communication
+  Serial.begin(9600);           // For debugging
+  gpsSerial.begin(9600);        // For GPS module
+  gsmSerial.begin(9600);        // For GSM module
+
+  // Send message to GSM
+  gsmSendMessage("Smart Shoes System Initialized. Ready for use!");
+}
+
+void loop() {
+  long duration, distance;
+
+  // Ultrasonic sensor for distance measurement
+  digitalWrite(triggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(triggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(triggerPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  distance = (duration / 2) / 29.1;
+
+  // Check distance and activate buzzer
+  if (distance < 70) {  // Change the value for different sensitivity
+    digitalWrite(buzzer, HIGH);  // Activate buzzer if obstacle detected
+  } else {
+    digitalWrite(buzzer, LOW);   // Deactivate buzzer if no obstacle
+  }
+
+  // Read GPS data
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+
+  // If a valid GPS fix is found, get the location data
+  if (gps.location.isUpdated()) {
+    float latitude = gps.location.lat();
+    float longitude = gps.location.lng();
+    Serial.print("Latitude= "); Serial.print(latitude, 6);
+    Serial.print(" Longitude= "); Serial.println(longitude, 6);
+  
+    // Send GPS data to the phone via GSM (SMS)
+    String message = "Alert! Location of Blind User: Lat: " + String(latitude, 6) + " Long: " + String(longitude, 6);
+    gsmSendMessage(message);
+  }
+
+  delay(1000);  // Delay for 1 second
+}
+
+// Function to send SMS via GSM module
+void gsmSendMessage(String message) {
+  gsmSerial.println("AT+CMGF=1");           // Set SMS mode to text
+  delay(200);
+  gsmSerial.print("AT+CMGS=\"+1234567890\"");  // Replace with the receiver's phone number
+  delay(200);
+  gsmSerial.print(message);                 // The message to be sent
+  delay(200);
+  gsmSerial.write(26);                      // ASCII code of Ctrl+Z to send the message
+  delay(5000);
+}
